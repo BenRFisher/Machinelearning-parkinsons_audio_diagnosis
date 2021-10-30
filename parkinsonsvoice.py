@@ -1,13 +1,10 @@
 import numpy as np
 import pandas as pd
-import sklearn
 import os,sys
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import accuracy_score
-from scipy.io.wavfile import read
-import librosa
 import parselmouth
 from parselmouth.praat import call
 
@@ -40,13 +37,10 @@ def modeltest(classifier, x_test,y_test):
 #download voice clip data, and analyse using parselmouth (praat python extension)
 def measurePitch(voiceID, f0min, f0max, unit):
     sound = parselmouth.Sound(voiceID) # read the sound
-    duration = call(sound, "Get total duration") # duration
     pitch = call(sound, "To Pitch", 0.0, f0min, f0max) #create a praat pitch object
     meanF0 = call(pitch, "Get mean", 0, 0, unit) # get mean pitch
-    #minF0 = call(pitch,"Get minimum pitch", 0, 0, unit)
-    #maxF0 = call(pitch,"Get maximum pitch", 0, 0, unit)
-    
-    stdevF0 = call(pitch, "Get standard deviation", 0 ,0, unit) # get standard deviation
+    minF0=call(pitch, "Get minimum", 0, 0, unit,"none")
+    maxF0=call(pitch,"Get maximum",0,0,unit,"none")
     harmonicity = call(sound, "To Harmonicity (cc)", 0.01, f0min, 0.1, 1.0)
     hnr = call(harmonicity, "Get mean", 0, 0)
     pointProcess = call(sound, "To PointProcess (periodic, cc)", f0min, f0max)
@@ -62,7 +56,7 @@ def measurePitch(voiceID, f0min, f0max, unit):
     apq11Shimmer =  call([sound, pointProcess], "Get shimmer (apq11)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
     ddaShimmer = call([sound, pointProcess], "Get shimmer (dda)", 0, 0, 0.0001, 0.02, 1.3, 1.6)
     
-    return duration, meanF0, stdevF0, hnr, localJitter, localabsoluteJitter, rapJitter, ppq5Jitter, ddpJitter, localShimmer, localdbShimmer, apq3Shimmer, aqpq5Shimmer, apq11Shimmer, ddaShimmer
+    return meanF0, minF0, maxF0, hnr, localJitter, localabsoluteJitter, rapJitter, ppq5Jitter, ddpJitter, localShimmer, localdbShimmer, apq3Shimmer, aqpq5Shimmer, apq11Shimmer, ddaShimmer
 #this translates binary output prediction into positive/negative parkinsons diagnosis
 def diagnose(diagnosis):
     if diagnosis==1:
@@ -77,11 +71,12 @@ def main():
     x_train,x_test,y_train,y_test = datasplit(x,labels)
     classifier=modeltraining(x_train,y_train)
     print(modeltest(classifier, x_test,y_test))
-    duration, meanF0, stdevF0, hnr,localJitter, localabsoluteJitter, rapJitter, ppq5Jitter, ddpJitter, localShimmer, localdbShimmer, apq3Shimmer, aqpq5Shimmer, apq11Shimmer, ddaShimmer= measurePitch(voiceID, 75, 500, "Hertz")
-    val=[meanF0,500,75,localJitter,localabsoluteJitter,rapJitter,ppq5Jitter,ddpJitter,localShimmer,localdbShimmer,apq3Shimmer,aqpq5Shimmer,apq11Shimmer,ddaShimmer,hnr]    
+    meanF0, minF0,maxF0, hnr,localJitter, localabsoluteJitter, rapJitter, ppq5Jitter, ddpJitter, localShimmer, localdbShimmer, apq3Shimmer, aqpq5Shimmer, apq11Shimmer, ddaShimmer= measurePitch(voiceID, 75, 500, "Hertz")
+    val=[meanF0,maxF0,minF0,localJitter,localabsoluteJitter,rapJitter,ppq5Jitter,ddpJitter,localShimmer,localdbShimmer,apq3Shimmer,aqpq5Shimmer,apq11Shimmer,ddaShimmer,hnr]    
     #data has to be reshaped to go through minmax scaling and then reshaped back, so 
     #i converted into a numpy array then reshaped it 
     val=np.array(val).reshape(-1,1)
+    print(val)
     val=minmax.fit_transform(val)
     val=val.reshape(1,-1)
     diagnosis=classifier.predict(val)
